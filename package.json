@@ -1,0 +1,34 @@
+{
+  "name": "satspay-api",
+  "version": "1.0.0",
+  "description": "The backend API powering the SatsPay protocol. Built with Node.js and Express, it sits between the frontend and the Stacks blockchain — handling authentication, transaction orchestration, claim management, FX rates, SMS notifications, and NGN offramp payouts.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mrwicks00/satspay-api.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Mrwicks00/satspay-api/issues"
+  },
+  "homepage": "https://github.com/Mrwicks00/satspay-api#readme",
+  "dependencies": {
+    "@prisma/client": "^7.5.0",
+    "@stacks/network": "^7.3.1",
+    "@stacks/transactions": "^7.3.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
+    "node-cron": "^4.2.1",
+    "winston": "^3.19.0",
+    "zod": "^4.3.6"
+  }
+}
