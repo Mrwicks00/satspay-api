@@ -8,6 +8,7 @@ import transferRoutes from "./routes/transfer.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
 import offrampRoutes from "./routes/offramp.routes.js";
 import businessRoutes from "./routes/business.routes.js";
+import claimRoutes from "./routes/claim.routes.js";
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use(express.json());
 // Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/transfers", transferRoutes);
+app.use("/api/v1/claims", claimRoutes);
 app.use("/api/v1/webhooks", webhookRoutes);
 app.use("/api/v1/offramp", offrampRoutes);
 app.use("/api/v1/business", businessRoutes);
