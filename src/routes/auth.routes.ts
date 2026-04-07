@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { AuthService } from "../services/auth.service.js";
+import { authMiddleware, AuthRequest } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
@@ -33,6 +34,25 @@ router.post("/verify-otp", async (req, res) => {
   try {
     const result = await AuthService.verifyOtp(phone, code);
     res.json({ success: true, ...result });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * @route   POST /api/v1/auth/connect-wallet
+ * @desc    Link an authenticated user's account to their Stacks wallet
+ * @access  Private
+ */
+router.post("/connect-wallet", authMiddleware, async (req: AuthRequest, res) => {
+  const { stacksAddress, signature, message } = req.body;
+  const userId = req.user?.userId;
+
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  try {
+    const user = await AuthService.connectWallet(userId, stacksAddress, signature, message);
+    res.json({ success: true, user });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }

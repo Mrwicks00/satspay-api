@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { 
   Cl, 
   fetchCallReadOnlyFunction, 
@@ -100,5 +101,63 @@ export class TransferService {
         }
       };
     }
+  }
+
+  static async confirmTransfer(transferId: string, txid: string) {
+    await prisma.transfer.update({
+      where: { id: transferId },
+      data: { status: "PENDING", txid }
+    });
+    return {
+      success: true,
+      status: "PENDING",
+      estimatedConfirmationMinutes: 10
+    };
+  }
+
+  static async getTransfers(userId: string, filters: any) {
+    const { page = 1, limit = 20, direction = "all", status } = filters;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const where: any = {};
+    if (direction === "sent") {
+      where.senderId = userId;
+    } else if (direction === "received") {
+      where.recipientId = userId;
+    } else {
+      where.OR = [{ senderId: userId }, { recipientId: userId }];
+    }
+
+    if (status) Object.assign(where, { status });
+
+    const transfers = await prisma.transfer.findMany({
+      where,
+      skip,
+      take: Number(limit),
+      orderBy: { createdAt: "desc" }
+    });
+
+    const total = await prisma.transfer.count({ where });
+
+    return {
+      transfers: transfers.map(t => ({ ...t, amountMicroSbtc: t.amountMicroSbtc.toString() })),
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit))
+      }
+    };
+  }
+
+  static async getTransferById(transferId: string, userId: string) {
+    const transfer = await prisma.transfer.findUnique({ where: { id: transferId }});
+    if (!transfer || (transfer.senderId !== userId && transfer.recipientId !== userId)) {
+      throw new Error("Transfer not found or unauthorized");
+    }
+    return {
+      ...transfer,
+      amountMicroSbtc: transfer.amountMicroSbtc.toString()
+    };
   }
 }
