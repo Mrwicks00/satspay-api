@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String    @id @default(cuid())
+  phone       String    @unique          // normalized: +2348012345678
+  phoneHash   String    @unique          // SHA-256(phone), stored onchain
+  stacksAddress String? @unique         // set after wallet connection
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sentTransfers     Transfer[] @relation("Sender")
+  receivedTransfers Transfer[] @relation("Recipient")
+  businessAccount   BusinessAccount?
+
+  @@map("users")
+}
+
+model Transfer {
+  id            String    @id @default(cuid())
+  claimId       String    @unique          // (buff 32) hex — matches onchain claim-id
+  claimToken    String    @unique          // UUID in the SMS link
+  
+  senderId      String
+  sender        User      @relation("Sender", fields: [senderId], references: [id])
+  
+  recipientPhone      String               // normalized phone of recipient
+  recipientPhoneHash  String               // SHA-256(recipientPhone)
+  recipientId         String?              // set if recipient is a registered user
+  recipient           User?     @relation("Recipient", fields: [recipientId], references: [id])
+  
+  amountMicroSbtc     BigInt               // amount in micro-sBTC (satoshis)
+  amountNgn           Decimal?             // NGN equivalent at time of send (display only)
+  fxRateAtSend        Decimal?             // sBTC/NGN rate used for display
+  
+  status        TransferStatus @default(PENDING)
+  txid          String?                    // Stacks transaction ID of the send
+  claimTxid     String?                    // Stacks transaction ID of the claim
+  
+  expiryBlock   Int                        // Stacks block height at expiry
+  expiresAt     DateTime                   // Wall clock estimate of expiry (display)
+  
+  claimedAt     DateTime?
+  reclaimedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  offrampPayout OfframpPayout?
+
+  @@map("transfers")
+}
+
+enum TransferStatus {
+  PENDING
+  CONFIRMED
+  CLAIMED
+  RECLAIMED
+  EXPIRED
+  FAILED
+}
+
+model OfframpPayout {
+  id            String    @id @default(cuid())
+  transferId    String    @unique
+  transfer      Transfer  @relation(fields: [transferId], references: [id])
+  
+  provider      OfframpProvider            // FLUTTERWAVE or PAYSTACK
+  bankCode      String                     // recipient's bank code
+  accountNumber String                     // recipient's account number
+  accountName   String                     // verified account name
+  amountNgn     Decimal                    // NGN amount to disburse
+  
+  providerRef   String?                    // provider's transaction reference
+  status        OfframpStatus @default(INITIATED)
+  
+  initiatedAt   DateTime  @default(now())
+  completedAt   DateTime?
+
+  @@map("offramp_payouts")
+}
+
+enum OfframpProvider {
+  FLUTTERWAVE
+  PAYSTACK
+}
+
+enum OfframpStatus {
+  INITIATED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model BusinessAccount {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id])
+  
+  businessName  String
+  rcNumber      String?                    // CAC registration number
+  verified      Boolean   @default(false)
+  
+  payrolls      Payroll[]
+  createdAt     DateTime  @default(now())
+
+  @@map("business_accounts")
+}
+
+model Payroll {
+  id              String    @id @default(cuid())
+  businessId      String
+  business        BusinessAccount @relation(fields: [businessId], references: [id])
+  
+  label           String                   // e.g. "March 2026 Salaries"
+  totalAmountMicroSbtc BigInt
+  recipientCount  Int
+  status          PayrollStatus @default(DRAFT)
+  
+  transfers       Transfer[]               // all transfers in this payroll batch
+  
+  createdAt       DateTime  @default(now())
+  processedAt     DateTime?
+
+  @@map("payrolls")
+}
+
+enum PayrollStatus {
+  DRAFT
+  PROCESSING
+  COMPLETED
+  PARTIAL
+}
+
+model OtpRecord {
+  id          String    @id @default(cuid())
+  phone       String
+  code        String                       // 6-digit OTP (hashed in DB)
+  expiresAt   DateTime
+  used        Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@map("otp_records")
+}
+
+model FxRateCache {
+  id          String    @id @default(cuid())
+  sbtcToNgn   Decimal                      // how many NGN per 1 sBTC
+  sbtcToUsd   Decimal                      // how many USD per 1 sBTC
+  fetchedAt   DateTime  @default(now())
+
+  @@map("fx_rate_cache")
+}

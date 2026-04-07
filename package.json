@@ -1,0 +1,51 @@
+{
+  "name": "satspay-api",
+  "version": "1.0.0",
+  "description": "The backend API powering the SatsPay protocol. Built with Node.js and Express, it sits between the frontend and the Stacks blockchain — handling authentication, transaction orchestration, claim management, FX rates, SMS notifications, and NGN offramp payouts.",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mrwicks00/satspay-api.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Mrwicks00/satspay-api/issues"
+  },
+  "homepage": "https://github.com/Mrwicks00/satspay-api#readme",
+  "dependencies": {
+    "@prisma/client": "^7.5.0",
+    "@stacks/network": "^7.3.1",
+    "@stacks/transactions": "^7.3.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
+    "node-cron": "^4.2.1",
+    "winston": "^3.19.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^22.10.2",
+    "@types/node-cron": "^3.0.11",
+    "nodemon": "^3.1.9",
+    "prisma": "^7.5.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  }
+}
