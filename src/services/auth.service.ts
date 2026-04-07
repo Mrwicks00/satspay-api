@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { env } from "../config/env.js";
 import prisma from "../config/database.js";
 import { normalizePhone, hashPhone } from "../utils/phone.js";
+import { SmsService } from "./sms.service.js";
 
 export class AuthService {
   /** Generates a 6-digit OTP and saves it to the database */
@@ -19,7 +20,7 @@ export class AuthService {
       },
     });
 
-    // In production, this would trigger the SMS service
+    await SmsService.sendSms(normalized, `Your SatsPay OTP is ${code}. Expires in 5 minutes.`);
     return code;
   }
 
@@ -66,5 +67,29 @@ export class AuthService {
     );
 
     return { token, user };
+  }
+
+  /** Links a Stacks wallet address to the authenticated user's account */
+  static async connectWallet(userId: string, stacksAddress: string, signature: string, message: string) {
+    // Basic validation
+    if (!stacksAddress || !signature || !message) {
+      throw new Error("Missing required connect-wallet payload");
+    }
+
+    // MOCK: Verify the signature against the message and address
+    // In production: import { verifyMessageSignatureRsv } from "@stacks/transactions"
+    // verifyMessageSignatureRsv({ message, signature, publicKey: ... })
+    const isValidSignature = true; 
+    
+    if (!isValidSignature) {
+      throw new Error("Invalid wallet signature");
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { stacksAddress },
+    });
+
+    return updatedUser;
   }
 }
