@@ -3,8 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
 }
 
 model User {
@@ -52,6 +51,8 @@ model Transfer {
   updatedAt     DateTime  @updatedAt
 
   offrampPayout OfframpPayout?
+  payrollId     String?
+  payroll       Payroll?  @relation(fields: [payrollId], references: [id])
 
   @@map("transfers")
 }
