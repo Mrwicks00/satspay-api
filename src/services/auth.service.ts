@@ -1,37 +1,50 @@
 import jwt from "jsonwebtoken";
-import crypto from "node:crypto";
 import { env } from "../config/env.js";
 import prisma from "../config/database.js";
 import { normalizePhone, hashPhone } from "../utils/phone.js";
 import { SmsService } from "./sms.service.js";
+import { sha256, generateOtp } from "../utils/crypto.js";
 
 export class AuthService {
   /** Generates a 6-digit OTP and saves it to the database */
   static async requestOtp(phone: string): Promise<string> {
     const normalized = normalizePhone(phone);
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Rate limit: max 3 OTP requests per phone per 10 minutes
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const recentRequests = await prisma.otpRecord.count({
+      where: { phone: normalized, createdAt: { gt: tenMinutesAgo } },
+    });
+    if (recentRequests >= 3) {
+      throw Object.assign(new Error("Too many OTP requests. Try again in 10 minutes."), { code: "RATE_LIMITED", status: 429 });
+    }
+
+    const code = generateOtp(); // crypto-secure 6-digit OTP
+    const codeHash = sha256(code); // hash before storing
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
     await prisma.otpRecord.create({
       data: {
         phone: normalized,
-        code,
+        code: codeHash, // store the hash, never the plaintext
         expiresAt,
       },
     });
 
     await SmsService.sendSms(normalized, `Your SatsPay OTP is ${code}. Expires in 5 minutes.`);
+    // In development we return the code so it can be tested without SMS
     return code;
   }
 
   /** Verifies the OTP and returns a JWT + user info */
   static async verifyOtp(phone: string, code: string) {
     const normalized = normalizePhone(phone);
+    const codeHash = sha256(code); // hash the input before comparing
     
     const record = await prisma.otpRecord.findFirst({
       where: {
         phone: normalized,
-        code,
+        code: codeHash,   // compare against the stored hash
         used: false,
         expiresAt: { gt: new Date() },
       },
@@ -39,7 +52,20 @@ export class AuthService {
     });
 
     if (!record) {
-      throw new Error("Invalid or expired OTP");
+      // Track failed attempt: count recent failures in last 30 minutes
+      const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+      const failedAttempts = await prisma.otpRecord.count({
+        where: {
+          phone: normalized,
+          used: false,
+          expiresAt: { lt: new Date() }, // expired = failed attempt
+          createdAt: { gt: thirtyMinAgo },
+        },
+      });
+      if (failedAttempts >= 5) {
+        throw Object.assign(new Error("Too many failed attempts. Phone locked for 30 minutes."), { code: "TOO_MANY_ATTEMPTS", status: 429 });
+      }
+      throw Object.assign(new Error("Invalid or expired OTP"), { code: "INVALID_OTP", status: 400 });
     }
 
     await prisma.otpRecord.update({

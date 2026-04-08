@@ -7,6 +7,8 @@ import {
 import { network, CONTRACTS } from "../config/stacks.js";
 import prisma from "../config/database.js";
 import { normalizePhone, hashPhone } from "../utils/phone.js";
+import { generateUUID, randomHex } from "../utils/crypto.js";
+import { logger } from "../utils/logger.js";
 
 export class TransferService {
   /** Checks the on-chain registry specifically for a phone hash */
@@ -31,7 +33,7 @@ export class TransferService {
       const match = cvStr.match(/owner ([A-Z0-9]+)/);
       return match ? match[1] : null;
     } catch (e) {
-      console.error("Registry lookup failed:", e);
+      logger.error("Registry lookup failed", { error: e });
       return null;
     }
   }
@@ -45,8 +47,8 @@ export class TransferService {
     const registeredAddress = await this.getRegistryInfo(recipientHash);
     
     // 2. Create transfer record in DB
-    const claimToken = crypto.randomUUID();
-    const claimId = crypto.randomBytes(32).toString("hex");
+    const claimToken = generateUUID();
+    const claimId = randomHex(32);
 
     const transfer = await prisma.transfer.create({
       data: {

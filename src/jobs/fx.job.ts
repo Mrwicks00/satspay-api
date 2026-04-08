@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import prisma from "../config/database.js";
 import { FxService } from "../services/fx.service.js";
+import { logger } from "../utils/logger.js";
 
 export const startFxJob = () => {
   // Run every 5 minutes
@@ -14,7 +15,7 @@ export const startFxJob = () => {
         }
       });
     } catch (e) {
-      console.error("[FX Job] Failed to update rates:", e);
+      logger.error("[FX Job] Failed to update rates", { error: e });
     }
   });
 };
