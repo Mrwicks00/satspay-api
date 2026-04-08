@@ -9,6 +9,16 @@ export class AuthService {
   /** Generates a 6-digit OTP and saves it to the database */
   static async requestOtp(phone: string): Promise<string> {
     const normalized = normalizePhone(phone);
+
+    // Rate limit: max 3 OTP requests per phone per 10 minutes
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const recentRequests = await prisma.otpRecord.count({
+      where: { phone: normalized, createdAt: { gt: tenMinutesAgo } },
+    });
+    if (recentRequests >= 3) {
+      throw Object.assign(new Error("Too many OTP requests. Try again in 10 minutes."), { code: "RATE_LIMITED", status: 429 });
+    }
+
     const code = generateOtp(); // crypto-secure 6-digit OTP
     const codeHash = sha256(code); // hash before storing
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
@@ -42,7 +52,20 @@ export class AuthService {
     });
 
     if (!record) {
-      throw new Error("Invalid or expired OTP");
+      // Track failed attempt: count recent failures in last 30 minutes
+      const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+      const failedAttempts = await prisma.otpRecord.count({
+        where: {
+          phone: normalized,
+          used: false,
+          expiresAt: { lt: new Date() }, // expired = failed attempt
+          createdAt: { gt: thirtyMinAgo },
+        },
+      });
+      if (failedAttempts >= 5) {
+        throw Object.assign(new Error("Too many failed attempts. Phone locked for 30 minutes."), { code: "TOO_MANY_ATTEMPTS", status: 429 });
+      }
+      throw Object.assign(new Error("Invalid or expired OTP"), { code: "INVALID_OTP", status: 400 });
     }
 
     await prisma.otpRecord.update({
