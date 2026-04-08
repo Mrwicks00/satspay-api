@@ -11,6 +11,7 @@ import businessRoutes from "./routes/business.routes.js";
 import claimRoutes from "./routes/claim.routes.js";
 import fxRoutes from "./routes/fx.routes.js";
 import { startFxJob } from "./jobs/fx.job.js";
+import { startExpiryJob } from "./jobs/expiry.job.js";
 import { logger } from "./utils/logger.js";
 
 const app = express();
@@ -41,6 +42,7 @@ if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
     logger.info(`SatsPay API running on port ${PORT}`, { env: env.NODE_ENV });
     startFxJob();
+    startExpiryJob();
   });
 }
 
