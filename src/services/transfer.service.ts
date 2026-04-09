@@ -11,6 +11,7 @@ import { generateUUID, randomHex } from "../utils/crypto.js";
 import { logger } from "../utils/logger.js";
 import { FxService } from "./fx.service.js";
 import { StacksService } from "./stacks.service.js";
+import { SmsService } from "./sms.service.js";
 
 export class TransferService {
   /** Checks the on-chain registry specifically for a phone hash */
@@ -138,11 +139,48 @@ export class TransferService {
       where: { id: transferId },
       data: { status: "PENDING", txid }
     });
+
+    // Fire-and-forget background polling — does NOT block the HTTP response
+    this.pollAndConfirm(transferId, txid).catch((e) =>
+      logger.error("[TransferService] Background poll error", { transferId, error: e })
+    );
+
     return {
       success: true,
       status: "PENDING",
       estimatedConfirmationMinutes: 10
     };
+  }
+
+  /** Background job: polls Hiro until tx confirms, then updates DB and sends SMS */
+  private static async pollAndConfirm(transferId: string, txid: string) {
+    const result = await StacksService.waitForConfirmation(txid);
+
+    const transfer = await prisma.transfer.findUnique({
+      where: { id: transferId },
+      include: { sender: true }
+    });
+    if (!transfer) return;
+
+    if (result === "success") {
+      await prisma.transfer.update({
+        where: { id: transferId },
+        data: { status: "CONFIRMED" }
+      });
+      // SMS the recipient with their claim link
+      await SmsService.sendClaimLink(
+        transfer.recipientPhone,
+        transfer.amountMicroSbtc,
+        transfer.claimToken
+      );
+      logger.info("[TransferService] Transfer confirmed, SMS sent", { transferId, txid });
+    } else {
+      await prisma.transfer.update({
+        where: { id: transferId },
+        data: { status: "FAILED" }
+      });
+      logger.warn("[TransferService] Transfer tx failed or timed out", { transferId, txid });
+    }
   }
 
   static async getTransfers(userId: string, filters: any) {
