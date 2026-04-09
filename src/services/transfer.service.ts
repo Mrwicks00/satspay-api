@@ -42,7 +42,7 @@ export class TransferService {
   }
 
   /** Initiates a transfer record and returns the unsigned transaction parameters */
-  static async prepareSend(senderId: string, recipientPhone: string, amountMicroSbtc: bigint) {
+  static async prepareSend(senderId: string, recipientPhone: string, amountMicroSbtc: bigint, payrollId?: string) {
     const normalized = normalizePhone(recipientPhone);
     const recipientHash = hashPhone(normalized);
     
@@ -90,6 +90,7 @@ export class TransferService {
         status: "PENDING",
         expiryBlock,
         expiresAt,
+        payrollId,
       },
     });
 
@@ -226,6 +227,28 @@ export class TransferService {
     return {
       ...transfer,
       amountMicroSbtc: transfer.amountMicroSbtc.toString()
+    };
+  }
+
+  /** Generates unsigned reclaim transaction for an expired escrow */
+  static async prepareReclaim(transferId: string, userId: string) {
+    const transfer = await prisma.transfer.findUnique({ where: { id: transferId } });
+    if (!transfer || transfer.senderId !== userId) {
+      throw new Error("Transfer not found or unauthorized");
+    }
+
+    if (transfer.status !== "EXPIRED") {
+      throw new Error("Transfer must be EXPIRED to reclaim");
+    }
+
+    return {
+      success: true,
+      unsignedTx: {
+        contractAddress: CONTRACTS.escrow.address,
+        contractName: CONTRACTS.escrow.name,
+        functionName: "reclaim",
+        functionArgs: [`0x${transfer.claimId}`]
+      }
     };
   }
 }

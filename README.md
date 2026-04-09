@@ -561,6 +561,27 @@ Returns full details of a single transfer.
 
 ---
 
+#### `POST /transfers/:transferId/reclaim`
+
+Generates an unsigned transaction for the sender to reclaim their sBTC from escrow if the transfer has expired and is unclaimed.
+
+**Auth:** Required (must be the original sender)
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "unsignedTx": {
+    "contractAddress": "ST...",
+    "contractName": "satspay-escrow",
+    "functionName": "reclaim",
+    "functionArgs": ["0x..."]
+  }
+}
+```
+
+---
+
 ### Claims
 
 #### `GET /claims/:claimToken`
@@ -779,6 +800,24 @@ Registers a business account for the authenticated user.
 {
   "businessName": "TechStaff Nigeria Ltd",
   "rcNumber": "RC1234567"
+}
+```
+
+---
+
+#### `GET /business/profile`
+
+Returns the authenticated user's business profile.
+
+**Auth:** Required
+
+**Response `200`:**
+```json
+{
+  "id": "clx...",
+  "businessName": "TechStaff Nigeria Ltd",
+  "rcNumber": "RC1234567",
+  "verified": false
 }
 ```
 
