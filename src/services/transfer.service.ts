@@ -9,6 +9,8 @@ import prisma from "../config/database.js";
 import { normalizePhone, hashPhone } from "../utils/phone.js";
 import { generateUUID, randomHex } from "../utils/crypto.js";
 import { logger } from "../utils/logger.js";
+import { FxService } from "./fx.service.js";
+import { StacksService } from "./stacks.service.js";
 
 export class TransferService {
   /** Checks the on-chain registry specifically for a phone hash */
@@ -46,7 +48,31 @@ export class TransferService {
     // 1. Check registry
     const registeredAddress = await this.getRegistryInfo(recipientHash);
     
-    // 2. Create transfer record in DB
+    // 2. Fetch FX rate and compute NGN equivalent at this moment
+    let fxRateAtSend: number | null = null;
+    let amountNgn: string | null = null;
+    try {
+      const rates = await FxService.getLatestRate();
+      fxRateAtSend = rates.sbtcToNgn;
+      const sbtc = Number(amountMicroSbtc) / 100_000_000;
+      amountNgn = (sbtc * fxRateAtSend).toFixed(2);
+    } catch (e) {
+      logger.warn("[TransferService] FX fetch failed, storing without NGN amount", { error: e });
+    }
+
+    // 3. Get current block height for expiry calculation (144 blocks ≈ 1 day, 4320 ≈ 30 days)
+    const EXPIRY_BLOCKS = 4320; // ~30 days
+    let expiryBlock = 0;
+    let expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    try {
+      const currentHeight = await StacksService.getCurrentBlockHeight();
+      expiryBlock = currentHeight + EXPIRY_BLOCKS;
+      expiresAt = await StacksService.estimateExpiryDate(expiryBlock);
+    } catch (e) {
+      logger.warn("[TransferService] Block height fetch failed, using 30-day wall clock fallback", { error: e });
+    }
+
+    // 4. Create transfer record in DB
     const claimToken = generateUUID();
     const claimId = randomHex(32);
 
@@ -58,9 +84,11 @@ export class TransferService {
         recipientPhone: normalized,
         recipientPhoneHash: recipientHash,
         amountMicroSbtc,
+        amountNgn: amountNgn ?? undefined,
+        fxRateAtSend: fxRateAtSend ?? undefined,
         status: "PENDING",
-        expiryBlock: 0, // Will be updated on confirmation
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        expiryBlock,
+        expiresAt,
       },
     });
 
