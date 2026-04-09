@@ -16,12 +16,53 @@ export class PayrollService {
       }
     });
 
+    const transfers = [];
+    let failures = 0;
+
     // Process each transfer
     for (const item of items) {
-       await TransferService.prepareSend(businessId, item.phone, item.amount);
-       // In a real app, this would be more granular and handle failures
+      try {
+        const result = await TransferService.prepareSend(businessId, item.phone, item.amount, payroll.id);
+        transfers.push({
+          phone: item.phone,
+          status: "SUCCESS",
+          transferId: result.transferId,
+          unsignedTx: result.unsignedTx
+        });
+      } catch (error: any) {
+        failures++;
+        transfers.push({
+          phone: item.phone,
+          status: "FAILED",
+          error: error.message
+        });
+      }
     }
 
-    return payroll;
+    // Determine final status based on failures
+    let finalStatus: "PROCESSING" | "PARTIAL" = "PROCESSING";
+    if (failures === items.length) {
+       // All failed, we'll mark as DRAFT so they can retry, or PARTIAL. Let's just use PARTIAL for simplicity.
+       finalStatus = "PARTIAL"; 
+    } else if (failures > 0) {
+       finalStatus = "PARTIAL";
+    }
+
+    // Update payroll status if there were failures
+    if (finalStatus !== "PROCESSING") {
+      await prisma.payroll.update({
+        where: { id: payroll.id },
+        data: { status: finalStatus }
+      });
+    }
+
+    return {
+      payrollId: payroll.id,
+      label: payroll.label,
+      totalAmountMicroSbtc: payroll.totalAmountMicroSbtc.toString(),
+      recipientCount: payroll.recipientCount,
+      status: finalStatus,
+      transfers
+    };
   }
 }

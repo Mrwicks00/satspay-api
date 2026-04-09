@@ -90,4 +90,22 @@ router.get("/:transferId", authMiddleware, async (req: AuthRequest, res: Respons
   }
 });
 
+/**
+ * @route   POST /api/v1/transfers/:transferId/reclaim
+ * @desc    Get unsigned reclaim transaction for an expired transfer
+ * @access  Private
+ */
+router.post("/:transferId/reclaim", authMiddleware, async (req: AuthRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  try {
+    const result = await TransferService.prepareReclaim(req.params.transferId as string, userId);
+    res.json(result);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 export default router;
+
