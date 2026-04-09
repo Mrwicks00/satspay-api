@@ -1,7 +1,25 @@
 import { Router } from "express";
+import { z } from "zod";
 import { ClaimService } from "../services/claim.service.js";
+import { validate } from "../middleware/validate.middleware.js";
 
 const router = Router();
+
+// Zod schemas
+const claimToWalletSchema = z.object({
+  recipientAddress: z.string().min(1, "Stacks address required"),
+});
+
+const confirmClaimSchema = z.object({
+  txid: z.string().min(1, "txid required"),
+  recipientAddress: z.string().min(1, "Stacks address required"),
+});
+
+const claimToBankSchema = z.object({
+  bankCode: z.string().min(1, "Bank code required"),
+  accountNumber: z.string().min(10, "Account number must be at least 10 digits"),
+  provider: z.enum(["flutterwave", "paystack"]),
+});
 
 router.get("/:claimToken", async (req, res) => {
   try {
@@ -12,9 +30,8 @@ router.get("/:claimToken", async (req, res) => {
   }
 });
 
-router.post("/:claimToken/claim-to-wallet", async (req, res) => {
+router.post("/:claimToken/claim-to-wallet", validate(claimToWalletSchema), async (req, res) => {
   const { recipientAddress } = req.body;
-  if (!recipientAddress) return res.status(400).json({ error: "Missing recipientAddress" });
 
   try {
     const result = await ClaimService.claimToWallet(req.params.claimToken as string, recipientAddress);
@@ -24,9 +41,8 @@ router.post("/:claimToken/claim-to-wallet", async (req, res) => {
   }
 });
 
-router.post("/:claimToken/confirm-claim", async (req, res) => {
+router.post("/:claimToken/confirm-claim", validate(confirmClaimSchema), async (req, res) => {
   const { txid, recipientAddress } = req.body;
-  if (!txid || !recipientAddress) return res.status(400).json({ error: "Missing payload" });
 
   try {
     const result = await ClaimService.confirmClaim(req.params.claimToken as string, txid, recipientAddress);
@@ -36,9 +52,8 @@ router.post("/:claimToken/confirm-claim", async (req, res) => {
   }
 });
 
-router.post("/:claimToken/claim-to-bank", async (req, res) => {
+router.post("/:claimToken/claim-to-bank", validate(claimToBankSchema), async (req, res) => {
   const { bankCode, accountNumber, provider } = req.body;
-  if (!bankCode || !accountNumber || !provider) return res.status(400).json({ error: "Missing payload" });
   
   try {
     const result = await ClaimService.claimToBank(req.params.claimToken as string, bankCode, accountNumber, provider);

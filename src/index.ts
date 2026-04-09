@@ -13,16 +13,30 @@ import fxRoutes from "./routes/fx.routes.js";
 import { startFxJob } from "./jobs/fx.job.js";
 import { startExpiryJob } from "./jobs/expiry.job.js";
 import { logger } from "./utils/logger.js";
+import { apiRateLimiter } from "./middleware/rateLimit.middleware.js";
+import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js";
 
 const app = express();
 
-// Middleware
+// Security & logging middleware
 app.use(helmet());
 app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
 
-// Routes
+// Global API rate limiter (60 req/min per IP)
+app.use("/api", apiRateLimiter);
+
+// Health check (no rate limiting, no auth)
+app.get("/health", async (_req, res) => {
+  res.json({
+    status: "ok",
+    env: env.NODE_ENV,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// API Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/transfers", transferRoutes);
 app.use("/api/v1/claims", claimRoutes);
@@ -31,10 +45,11 @@ app.use("/api/v1/offramp", offrampRoutes);
 app.use("/api/v1/business", businessRoutes);
 app.use("/api/v1/fx", fxRoutes);
 
-// Routes Placeholder
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", env: env.NODE_ENV });
-});
+// 404 catch-all (must be after all routes)
+app.use(notFoundHandler);
+
+// Global error handler (must be last)
+app.use(errorHandler);
 
 const PORT = env.PORT || 4000;
 

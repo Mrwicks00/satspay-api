@@ -1,21 +1,32 @@
 import { Router, Response } from "express";
+import { z } from "zod";
 import { TransferService } from "../services/transfer.service.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.middleware.js";
+import { validate } from "../middleware/validate.middleware.js";
 
 const router = Router();
+
+// Zod schemas
+const sendSchema = z.object({
+  recipientPhone: z.string().min(10, "Invalid recipient phone"),
+  amountMicroSbtc: z.number().int().positive("Amount must be a positive integer"),
+  note: z.string().max(200).optional(),
+});
+
+const confirmSchema = z.object({
+  txid: z.string().min(1, "txid required"),
+});
 
 /**
  * @route   POST /api/v1/transfers/send
  * @desc    Initiate a transfer (escrow or direct)
  * @access  Private
  */
-router.post("/send", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post("/send", authMiddleware, validate(sendSchema), async (req: AuthRequest, res: Response) => {
   const { recipientPhone, amountMicroSbtc } = req.body;
   const senderId = req.user?.userId;
 
-  if (!senderId || !recipientPhone || !amountMicroSbtc) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
+  if (!senderId) return res.status(401).json({ error: "Unauthorized" });
 
   try {
     const result = await TransferService.prepareSend(
@@ -34,9 +45,8 @@ router.post("/send", authMiddleware, async (req: AuthRequest, res: Response) => 
  * @desc    Confirm a sent transfer transaction in pending state
  * @access  Private
  */
-router.post("/:transferId/confirm", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post("/:transferId/confirm", authMiddleware, validate(confirmSchema), async (req: AuthRequest, res: Response) => {
   const { txid } = req.body;
-  if (!txid) return res.status(400).json({ error: "Missing txid" });
 
   try {
     const result = await TransferService.confirmTransfer(req.params.transferId as string, txid);
