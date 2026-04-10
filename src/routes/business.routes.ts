@@ -3,7 +3,11 @@ import { z } from "zod";
 import { BusinessService } from "../services/business.service.js";
 import { PayrollService } from "../services/payroll.service.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.middleware.js";
+import multer from "multer";
+import { parse } from "csv-parse/sync";
 import { validate } from "../middleware/validate.middleware.js";
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
 
@@ -86,6 +90,73 @@ router.post("/payroll", authMiddleware, validate(payrollSchema), async (req: Aut
     res.json({ success: true, payroll: result });
   } catch (error: any) {
     res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+/**
+ * @route   POST /api/v1/business/payroll/upload-csv
+ * @desc    Upload CSV for payroll parsing and preview
+ * @access  Private
+ */
+router.post("/payroll/upload-csv", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  if (!req.file) {
+    return res.status(400).json({ error: "No CSV file uploaded. Provide a file field." });
+  }
+
+  try {
+    const business = await BusinessService.getProfile(userId);
+    if (!business) return res.status(404).json({ error: "Business profile not found" });
+
+    // Parse CSV
+    const csvData = req.file.buffer.toString("utf-8");
+    const records = parse(csvData, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    });
+
+    const preview = [];
+    const errors = [];
+    let totalMicroSbtc = 0n;
+
+    for (let i = 0; i < records.length; i++) {
+        const r = records[i];
+        
+        // Manual basic validation
+        if (!r.phone || !r.amount_sbtc) {
+          errors.push({ line: i + 2, error: "Missing phone or amount_sbtc" });
+          continue;
+        }
+
+        const sbtcNum = Number(r.amount_sbtc);
+        if (isNaN(sbtcNum) || sbtcNum <= 0) {
+            errors.push({ line: i + 2, error: "Invalid amount_sbtc" });
+            continue;
+        }
+
+        // Convert sBTC (e.g. 0.005) to micro-sBTC (500000)
+        const amountMicroSbtc = BigInt(Math.floor(sbtcNum * 100_000_000));
+        totalMicroSbtc += amountMicroSbtc;
+
+        preview.push({
+            phone: r.phone,
+            name: r.name || "",
+            amountMicroSbtc: amountMicroSbtc.toString(),
+            amountSbtc: r.amount_sbtc
+        });
+    }
+
+    res.json({
+        preview,
+        totalAmountMicroSbtc: totalMicroSbtc.toString(),
+        recipientCount: preview.length,
+        errors
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: `CSV parsing failed: ${error.message}` });
   }
 });
 
