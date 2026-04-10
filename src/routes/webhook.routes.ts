@@ -53,5 +53,38 @@ router.post("/hiro", (req: Request, res: Response) => {
       res.status(500).json({ error: error.message });
     });
 });
+/**
+ * Verifies Flutterwave webhook signature via `verif-hash` header.
+ */
+function verifyFlwSignature(req: Request): boolean {
+  const secret = process.env.FLW_WEBHOOK_SECRET;
+  if (!secret) {
+    logger.warn("[Webhook] FLW_WEBHOOK_SECRET not set — skipping signature verification");
+    return true;
+  }
+  const hash = req.headers["verif-hash"];
+  return hash === secret;
+}
+
+/**
+ * @route   POST /api/v1/webhooks/flutterwave
+ * @desc    Flutterwave payout webhook
+ * @access  Public (Signature verified)
+ */
+router.post("/flutterwave", (req: Request, res: Response) => {
+  if (!verifyFlwSignature(req)) {
+    logger.warn("[Webhook] Invalid Flutterwave signature", { ip: req.ip });
+    res.status(401).json({ error: "Invalid signatures" });
+    return;
+  }
+
+  // Flutterwave expects a fast 200 OK
+  res.status(200).send("OK");
+
+  // Process asynchronously
+  WebhookService.handleFlutterwaveWebhook(req.body).catch((error: any) => {
+    logger.error("[Webhook] Flutterwave handler error", { error: error.message });
+  });
+});
 
 export default router;

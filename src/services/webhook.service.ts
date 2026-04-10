@@ -52,4 +52,37 @@ export class WebhookService {
 
     return { success: true };
   }
+
+  /** Processes a Flutterwave payout webhook event */
+  static async handleFlutterwaveWebhook(payload: any) {
+    if (payload.event !== "transfer.completed") return { success: true, message: "Ignored event type" };
+
+    const { status, reference, data } = payload.data || {};
+    
+    if (!reference) return { success: false, message: "No reference provided" };
+
+    const payout = await prisma.offrampPayout.findFirst({
+      where: { providerRef: reference }
+    });
+
+    if (!payout) return { success: false, message: "Payout record not found" };
+
+    const newStatus = status === "SUCCESSFUL" ? "COMPLETED" : "FAILED";
+    
+    if (payout.status === newStatus) return { success: true, message: "Status already synced" };
+
+    await prisma.offrampPayout.update({
+      where: { id: payout.id },
+      data: { status: newStatus }
+    });
+
+    if (newStatus === "FAILED") {
+      // Optional: Handle payout failure logic (e.g. notify admin, refund user)
+      console.warn(`[Webhook] Offramp payout ${payout.id} FAILED!`);
+    } else {
+       console.info(`[Webhook] Offramp payout ${payout.id} COMPLETED.`);
+    }
+
+    return { success: true };
+  }
 }
