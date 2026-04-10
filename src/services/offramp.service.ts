@@ -2,7 +2,43 @@ import prisma from "../config/database.js";
 import { env } from "../config/env.js";
 
 export class OfframpService {
-  /** Initiates an NGN payout for a recipient (mocked) */
+  /** Flutterwave HTTP utility with exponential backoff */
+  private static async flwFetch(endpoint: string, options: RequestInit, retries = 3): Promise<any> {
+    const url = `https://api.flutterwave.com/v3${endpoint}`;
+    let attempt = 0;
+    while (attempt < retries) {
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            "Authorization": `Bearer ${env.FLW_SECRET_KEY}`,
+            "Content-Type": "application/json",
+            ...(options.headers || {})
+          }
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          // Do not retry 4xx errors
+          if (response.status >= 400 && response.status < 500) {
+            throw new Error(`FLW Error: ${errText}`);
+          }
+          throw new Error(`FLW HTTP ${response.status}: ${errText}`);
+        }
+        
+        return await response.json();
+      } catch (error: any) {
+        attempt++;
+        if (error.message.includes("FLW Error:") || attempt >= retries) {
+          throw error;
+        }
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        await new Promise(res => setTimeout(res, delay));
+      }
+    }
+  }
+
+  /** Initiates an NGN payout for a recipient */
   static async requestPayout(transferId: string, bankCode: string, accountNumber: string) {
     const transfer = await prisma.transfer.findUnique({
       where: { id: transferId },
@@ -33,16 +69,28 @@ export class OfframpService {
     return payout;
   }
 
-  /** Returns supported banks */
+  /** Returns supported banks natively from Flutterwave */
   static async getBanks() {
-    return [
-      { code: "044", name: "Access Bank" },
-      { code: "057", name: "Zenith Bank" },
-      { code: "058", name: "GTBank" },
-      { code: "033", name: "UBA" },
-      { code: "999999", name: "Opay" },
-      { code: "50515", name: "Moniepoint" }
-    ];
+    if (env.NODE_ENV === "test") {
+      return [
+        { code: "044", name: "Access Bank" },
+        { code: "057", name: "Zenith Bank" }
+      ];
+    }
+
+    try {
+      const data = await this.flwFetch("/banks/NG", { method: "GET" });
+      if (data.status === "success" && data.data) {
+        return data.data.map((b: any) => ({
+          code: b.code,
+          name: b.name
+        }));
+      }
+      return [];
+    } catch (error) {
+      console.error("[Offramp] Failed to fetch FLW banks:", error);
+      throw error;
+    }
   }
 
   /** Verifies a bank account number */
