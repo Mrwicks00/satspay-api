@@ -93,18 +93,36 @@ export class OfframpService {
     }
   }
 
-  /** Verifies a bank account number */
+  /** Verifies a bank account number via Flutterwave */
   static async verifyAccount(bankCode: string, accountNumber: string, provider: string) {
-    if (accountNumber.length < 10) throw new Error("Invalid account number");
-    const banks = await this.getBanks();
-    const bank = banks.find(b => b.code === bankCode);
-    if (!bank) throw new Error("Bank not supported");
+    if (env.NODE_ENV === "test") {
+       return {
+         valid: true,
+         accountName: "MOCK ACCOUNT HOLDER",
+         bankCode,
+         bankName: "MOCK BANK"
+       };
+    }
 
-    return {
-      valid: true,
-      accountName: "MOCK ACCOUNT HOLDER",
-      bankCode,
-      bankName: bank.name
-    };
+    try {
+      const payload = { account_number: accountNumber, account_bank: bankCode };
+      const data = await this.flwFetch("/accounts/resolve", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      
+      if (data.status === "success" && data.data) {
+        return {
+           valid: true,
+           accountName: data.data.account_name,
+           bankCode,
+           bankName: "N/A" // FW resolve API doesn't return the bank name directly
+        };
+      }
+      throw new Error("Invalid account details");
+    } catch (error: any) {
+      console.error("[Offramp] Failed to verify bank account:", error.message);
+      throw new Error(error.message.replace("FLW Error: ", "") || "Bank account verification failed");
+    }
   }
 }
