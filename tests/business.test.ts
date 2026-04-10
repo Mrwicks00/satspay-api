@@ -4,7 +4,8 @@ import request from "supertest";
 vi.mock("../src/config/env.js", () => ({
   env: {
     NODE_ENV: "test",
-    JWT_SECRET: "test-secret"
+    JWT_SECRET: "test-secret",
+    STACKS_NETWORK: "mainnet"
   }
 }));
 
