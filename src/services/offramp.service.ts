@@ -133,11 +133,16 @@ export class OfframpService {
   /** Verifies a bank account number via Flutterwave */
   static async verifyAccount(bankCode: string, accountNumber: string, provider: string) {
     if (env.NODE_ENV === "test") {
+       if (accountNumber.length < 10) throw new Error("Invalid account number");
+       const banks = await this.getBanks();
+       const bank = banks.find(b => b.code === bankCode);
+       if (!bank) throw new Error("Bank not supported");
+
        return {
          valid: true,
          accountName: "MOCK ACCOUNT HOLDER",
          bankCode,
-         bankName: "MOCK BANK"
+         bankName: bank.name
        };
     }
 
