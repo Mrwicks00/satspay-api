@@ -38,7 +38,7 @@ export class OfframpService {
     }
   }
 
-  /** Initiates an NGN payout for a recipient */
+  /** Initiates an NGN payout for a recipient using Flutterwave /transfers */
   static async requestPayout(transferId: string, bankCode: string, accountNumber: string) {
     const transfer = await prisma.transfer.findUnique({
       where: { id: transferId },
@@ -49,24 +49,61 @@ export class OfframpService {
     if (transfer.status !== "CLAIMED") throw new Error("Only claimed transfers can be offramped");
     if (transfer.offrampPayout) throw new Error("Payout already initiated");
 
-    // In production, this would call Flutterwave/Paystack API
-    // 1. Resolve Account Name
-    // 2. Initiate Transfer
-    
-    const payout = await prisma.offrampPayout.create({
-      data: {
-        transferId,
-        provider: "FLUTTERWAVE",
-        bankCode,
-        accountNumber,
-        accountName: "Recipient Name", // placeholder
-        amountNgn: transfer.amountNgn || 0,
-        status: "PROCESSING",
-        providerRef: `flw_ref_${Date.now()}`
-      }
-    });
+    if (env.NODE_ENV === "test") {
+      return await prisma.offrampPayout.create({
+        data: {
+          transferId,
+          provider: "FLUTTERWAVE",
+          bankCode,
+          accountNumber,
+          accountName: "Recipient Name",
+          amountNgn: transfer.amountNgn || 0,
+          status: "PROCESSING",
+          providerRef: `flw_ref_${Date.now()}`
+        }
+      });
+    }
 
-    return payout;
+    try {
+      // 1. Resolve Account Name first to assert validity and fetch proper name
+      const accountInfo = await this.verifyAccount(bankCode, accountNumber, "flutterwave");
+
+      // 2. Initiate Transfer
+      const providerRef = `SPY-FW-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const payload = {
+        account_bank: bankCode,
+        account_number: accountNumber,
+        amount: Number(transfer.amountNgn),
+        narration: `SatsPay Payout ${transfer.id.slice(-6)}`,
+        currency: "NGN",
+        reference: providerRef,
+        callback_url: "https://satspay.africa/api/v1/webhooks/flutterwave" // We rely on webhook to mark complete
+      };
+
+      const data = await this.flwFetch("/transfers", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+
+      if (data.status === "success" && data.data) {
+        return await prisma.offrampPayout.create({
+          data: {
+            transferId,
+            provider: "FLUTTERWAVE",
+            bankCode,
+            accountNumber,
+            accountName: accountInfo.accountName,
+            amountNgn: transfer.amountNgn || 0,
+            status: "PROCESSING", // Will update to COMPLETED via webhook
+            providerRef: data.data.id?.toString() || providerRef
+          }
+        });
+      }
+      throw new Error(data.message || "Transfer initiation failed");
+    } catch (error: any) {
+      console.error("[Offramp] Failed to request payout:", error.message);
+      throw new Error(error.message.replace("FLW Error: ", "") || "Payout request failed");
+    }
   }
 
   /** Returns supported banks natively from Flutterwave */
