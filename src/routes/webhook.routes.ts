@@ -3,6 +3,30 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { WebhookService } from "../services/webhook.service.js";
 import { logger } from "../utils/logger.js";
 
+/**
+ * Verifies Paystack webhook signature.
+ * Paystack signs with HMAC-SHA512 using the secret key.
+ * Header: x-paystack-signature: <hex>
+ */
+function verifyPaystackSignature(req: Request): boolean {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  if (!secret) {
+    logger.warn("[Webhook] PAYSTACK_SECRET_KEY not set — skipping signature verification");
+    return true;
+  }
+  const sigHeader = req.headers["x-paystack-signature"] as string | undefined;
+  if (!sigHeader) return false;
+
+  const body = JSON.stringify(req.body);
+  const expectedSig = createHmac("sha512", secret).update(body).digest("hex");
+
+  try {
+    return timingSafeEqual(Buffer.from(sigHeader, "hex"), Buffer.from(expectedSig, "hex"));
+  } catch {
+    return false;
+  }
+}
+
 const router = Router();
 
 /**
@@ -84,6 +108,27 @@ router.post("/flutterwave", (req: Request, res: Response) => {
   // Process asynchronously
   WebhookService.handleFlutterwaveWebhook(req.body).catch((error: any) => {
     logger.error("[Webhook] Flutterwave handler error", { error: error.message });
+  });
+});
+
+/**
+ * @route   POST /api/v1/webhooks/paystack
+ * @desc    Paystack payout webhook
+ * @access  Public (Signature verified via HMAC-SHA512)
+ */
+router.post("/paystack", (req: Request, res: Response) => {
+  if (!verifyPaystackSignature(req)) {
+    logger.warn("[Webhook] Invalid Paystack signature", { ip: req.ip });
+    res.status(401).json({ error: "Invalid webhook signature" });
+    return;
+  }
+
+  // Paystack expects 200 OK immediately
+  res.status(200).send("OK");
+
+  // Process asynchronously
+  WebhookService.handlePaystackWebhook(req.body).catch((error: any) => {
+    logger.error("[Webhook] Paystack handler error", { error: error.message });
   });
 });
 

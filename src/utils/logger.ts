@@ -1,5 +1,12 @@
 import { createLogger, format, transports } from "winston";
 import { env } from "../config/env.js";
+import fs from "node:fs";
+import path from "node:path";
+
+const logDir = path.join(process.cwd(), "logs");
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir, { recursive: true });
+}
 
 const { combine, timestamp, colorize, printf, json } = format;
 
@@ -14,8 +21,25 @@ const devFormat = combine(
 
 const prodFormat = combine(timestamp(), json());
 
+const coreTransports: any[] = [
+  new transports.Console(),
+  new transports.File({ 
+    filename: path.join(logDir, "error.log"), 
+    level: "error",
+    format: prodFormat, // Always JSON in files
+    maxsize: 5242880, // 5MB
+    maxFiles: 5
+  }),
+  new transports.File({
+    filename: path.join(logDir, "combined.log"),
+    format: prodFormat, // Always JSON in files
+    maxsize: 10485760, // 10MB
+    maxFiles: 10
+  })
+];
+
 export const logger = createLogger({
   level: env.NODE_ENV === "production" ? "info" : "debug",
   format: env.NODE_ENV === "production" ? prodFormat : devFormat,
-  transports: [new transports.Console()],
+  transports: coreTransports,
 });

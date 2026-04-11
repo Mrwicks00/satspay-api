@@ -77,10 +77,45 @@ export class WebhookService {
     });
 
     if (newStatus === "FAILED") {
-      // Optional: Handle payout failure logic (e.g. notify admin, refund user)
       console.warn(`[Webhook] Offramp payout ${payout.id} FAILED!`);
     } else {
        console.info(`[Webhook] Offramp payout ${payout.id} COMPLETED.`);
+    }
+
+    return { success: true };
+  }
+
+  /** Processes a Paystack payout webhook event */
+  static async handlePaystackWebhook(payload: any) {
+    const event = payload.event;
+
+    // Paystack uses 'transfer.success' and 'transfer.failed'
+    if (!event || !event.startsWith("transfer.")) {
+      return { success: true, message: "Ignored non-transfer event" };
+    }
+
+    const reference = payload.data?.reference;
+    if (!reference) return { success: false, message: "No reference provided" };
+
+    const payout = await prisma.offrampPayout.findFirst({
+      where: { providerRef: reference }
+    });
+
+    if (!payout) return { success: false, message: "Payout record not found" };
+
+    const newStatus = event === "transfer.success" ? "COMPLETED" : "FAILED";
+
+    if (payout.status === newStatus) return { success: true, message: "Status already synced" };
+
+    await prisma.offrampPayout.update({
+      where: { id: payout.id },
+      data: { status: newStatus }
+    });
+
+    if (newStatus === "FAILED") {
+      console.warn(`[Webhook] Paystack payout ${payout.id} FAILED!`);
+    } else {
+      console.info(`[Webhook] Paystack payout ${payout.id} COMPLETED.`);
     }
 
     return { success: true };
