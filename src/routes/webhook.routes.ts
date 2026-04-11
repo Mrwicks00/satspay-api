@@ -111,4 +111,25 @@ router.post("/flutterwave", (req: Request, res: Response) => {
   });
 });
 
+/**
+ * @route   POST /api/v1/webhooks/paystack
+ * @desc    Paystack payout webhook
+ * @access  Public (Signature verified via HMAC-SHA512)
+ */
+router.post("/paystack", (req: Request, res: Response) => {
+  if (!verifyPaystackSignature(req)) {
+    logger.warn("[Webhook] Invalid Paystack signature", { ip: req.ip });
+    res.status(401).json({ error: "Invalid webhook signature" });
+    return;
+  }
+
+  // Paystack expects 200 OK immediately
+  res.status(200).send("OK");
+
+  // Process asynchronously
+  WebhookService.handlePaystackWebhook(req.body).catch((error: any) => {
+    logger.error("[Webhook] Paystack handler error", { error: error.message });
+  });
+});
+
 export default router;
