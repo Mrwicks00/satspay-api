@@ -3,6 +3,30 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { WebhookService } from "../services/webhook.service.js";
 import { logger } from "../utils/logger.js";
 
+/**
+ * Verifies Paystack webhook signature.
+ * Paystack signs with HMAC-SHA512 using the secret key.
+ * Header: x-paystack-signature: <hex>
+ */
+function verifyPaystackSignature(req: Request): boolean {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  if (!secret) {
+    logger.warn("[Webhook] PAYSTACK_SECRET_KEY not set — skipping signature verification");
+    return true;
+  }
+  const sigHeader = req.headers["x-paystack-signature"] as string | undefined;
+  if (!sigHeader) return false;
+
+  const body = JSON.stringify(req.body);
+  const expectedSig = createHmac("sha512", secret).update(body).digest("hex");
+
+  try {
+    return timingSafeEqual(Buffer.from(sigHeader, "hex"), Buffer.from(expectedSig, "hex"));
+  } catch {
+    return false;
+  }
+}
+
 const router = Router();
 
 /**
