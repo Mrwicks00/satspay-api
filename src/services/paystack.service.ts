@@ -65,4 +65,34 @@ export class PaystackService {
       throw new Error("Failed to retrieve banks from Paystack");
     }
   }
+
+  /** Verifies a bank account number via Paystack */
+  static async verifyAccount(bankCode: string, accountNumber: string) {
+    if (env.NODE_ENV === "test") {
+      if (accountNumber.length < 10) throw new Error("Invalid account number");
+      const banks = await this.getBanks();
+      const bank = banks.find(b => b.code === bankCode);
+      if (!bank) throw new Error("Bank not supported");
+      return { valid: true, accountName: "MOCK PST HOLDER", bankCode, bankName: bank.name };
+    }
+
+    try {
+      const data = await this.pstFetch(
+        `/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`,
+        { method: "GET" }
+      );
+      if (data.status && data.data) {
+        return {
+          valid: true,
+          accountName: data.data.account_name,
+          bankCode,
+          bankName: data.data.bank_name || "N/A"
+        };
+      }
+      throw new Error("Account resolution failed");
+    } catch (error: any) {
+      logger.error("[Paystack] verifyAccount failed", { error: error.message });
+      throw new Error(error.message.replace("PST Error: ", "") || "Account verification failed");
+    }
+  }
 }
