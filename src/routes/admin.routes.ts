@@ -67,4 +67,41 @@ router.get("/stranded", async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * @route   POST /api/v1/admin/payouts/:id/force-retry
+ * @desc    Force resolve a PROCESSING payout
+ * @access  Private (Admin only)
+ */
+router.post("/payouts/:id/force-retry", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const payout = await prisma.offrampPayout.findUnique({
+      where: { id }
+    });
+
+    if (!payout) return res.status(404).json({ error: "Payout not found" });
+    if (payout.status !== "PROCESSING") {
+      return res.status(400).json({ error: `Payout is already ${payout.status}` });
+    }
+
+    const remoteStatus = payout.provider === "PAYSTACK" 
+      ? await PaystackService.getPayoutStatus(payout.providerRef)
+      : await OfframpService.getPayoutStatus(payout.providerRef);
+
+    if (remoteStatus !== "PROCESSING") {
+      await prisma.offrampPayout.update({
+        where: { id },
+        data: { status: remoteStatus }
+      });
+      return res.json({ success: true, message: `Payout forcefully resolved to ${remoteStatus}` });
+    }
+
+    res.json({ success: true, message: "Payout is still legitimately processing upstream" });
+  } catch (error: any) {
+    logger.error("[Admin] Force-retry failed", { id: req.params.id, error: error.message });
+    res.status(500).json({ error: "Force-retry operation failed" });
+  }
+});
+
 export default router;
