@@ -10,6 +10,7 @@ import offrampRoutes from "./routes/offramp.routes.js";
 import businessRoutes from "./routes/business.routes.js";
 import claimRoutes from "./routes/claim.routes.js";
 import fxRoutes from "./routes/fx.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 import { logger } from "./utils/logger.js";
 import { apiRateLimiter } from "./middleware/rateLimit.middleware.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js";
@@ -42,6 +43,7 @@ app.use("/api/v1/webhooks", webhookRoutes);
 app.use("/api/v1/offramp", offrampRoutes);
 app.use("/api/v1/business", businessRoutes);
 app.use("/api/v1/fx", fxRoutes);
+app.use("/api/v1/admin", adminRoutes);
 
 // 404 catch-all (must be after all routes)
 app.use(notFoundHandler);
