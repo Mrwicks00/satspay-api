@@ -28,6 +28,11 @@ const coreTransports: any[] = [
     level: "error",
     maxsize: 5242880, // 5MB
     maxFiles: 5
+  }),
+  new transports.File({
+    filename: path.join(logDir, "combined.log"),
+    maxsize: 10485760, // 10MB
+    maxFiles: 10
   })
 ];
 
