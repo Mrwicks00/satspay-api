@@ -44,4 +44,27 @@ router.get("/stats", async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * @route   GET /api/v1/admin/stranded
+ * @desc    Fetch OfframpPayouts stuck in PROCESSING for over 1 hour
+ * @access  Private (Admin only)
+ */
+router.get("/stranded", async (_req: Request, res: Response) => {
+  try {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const stranded = await prisma.offrampPayout.findMany({
+      where: {
+        status: "PROCESSING",
+        createdAt: { lt: oneHourAgo }
+      },
+      orderBy: { createdAt: "asc" }
+    });
+
+    res.json({ success: true, data: stranded });
+  } catch (error: any) {
+    logger.error("[Admin] Failed to fetch stranded payouts", { error: error.message });
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;
