@@ -30,3 +30,24 @@ export const authMiddleware = (
     return res.status(401).json({ error: "Unauthorized" });
   }
 };
+
+/**
+ * Middleware restricted to internal administrative telemetry & operations
+ */
+export const adminMiddleware = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const adminSecret = process.env.ADMIN_SECRET_KEY;
+  if (!adminSecret) {
+    return res.status(500).json({ error: "Server admin security layer not configured" });
+  }
+
+  const requestedSecret = req.headers["x-admin-secret"];
+  if (!requestedSecret || requestedSecret !== adminSecret) {
+    return res.status(403).json({ error: "Forbidden: Invalid admin credentials" });
+  }
+
+  next();
+};
