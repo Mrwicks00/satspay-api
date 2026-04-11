@@ -2,6 +2,9 @@ node_modules
 dist
 .env
 *.log
+# Log files are ignored but directory is preserved via logs/.gitkeep
+/logs/*.log
+/logs/*.log.*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
