@@ -26,11 +26,13 @@ const coreTransports: any[] = [
   new transports.File({ 
     filename: path.join(logDir, "error.log"), 
     level: "error",
+    format: prodFormat, // Always JSON in files
     maxsize: 5242880, // 5MB
     maxFiles: 5
   }),
   new transports.File({
     filename: path.join(logDir, "combined.log"),
+    format: prodFormat, // Always JSON in files
     maxsize: 10485760, // 10MB
     maxFiles: 10
   })
