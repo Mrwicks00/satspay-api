@@ -195,4 +195,22 @@ export class OfframpService {
       throw new Error(error.message.replace("FLW Error: ", "") || "Bank account verification failed");
     }
   }
+
+  /** Queries Flutterwave for exact status of a stranded payout */
+  static async getPayoutStatus(providerRef: string): Promise<"PROCESSING" | "COMPLETED" | "FAILED"> {
+    if (env.NODE_ENV === "test") return "COMPLETED";
+    
+    try {
+      const data = await this.flwFetch(`/transfers/${providerRef}`, { method: "GET" });
+      if (data.status !== "success" || !data.data) return "PROCESSING";
+
+      const flwStatus = data.data.status?.toUpperCase();
+      if (flwStatus === "SUCCESSFUL" || flwStatus === "COMPLETED") return "COMPLETED";
+      if (flwStatus === "FAILED" || flwStatus === "REJECTED") return "FAILED";
+      
+      return "PROCESSING";
+    } catch {
+      return "PROCESSING";
+    }
+  }
 }
