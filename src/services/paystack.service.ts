@@ -95,4 +95,57 @@ export class PaystackService {
       throw new Error(error.message.replace("PST Error: ", "") || "Account verification failed");
     }
   }
+
+  /** Initiates an NGN payout through Paystack Transfer API */
+  static async requestPayout(opts: {
+    accountNumber: string;
+    bankCode: string;
+    accountName: string;
+    amountKobo: number; // Paystack uses kobo (1 NGN = 100 kobo)
+    reference: string;
+    narration: string;
+  }) {
+    if (env.NODE_ENV === "test") {
+      return { id: "pst-test-transfer-123", status: "pending", reference: opts.reference };
+    }
+
+    try {
+      // Step 1: Create a transfer recipient
+      const recipientData = await this.pstFetch("/transferrecipient", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "nuban",
+          name: opts.accountName,
+          account_number: opts.accountNumber,
+          bank_code: opts.bankCode,
+          currency: "NGN"
+        })
+      });
+
+      if (!recipientData.status || !recipientData.data?.recipient_code) {
+        throw new Error("Failed to create transfer recipient");
+      }
+
+      // Step 2: Initiate the transfer
+      const transferData = await this.pstFetch("/transfer", {
+        method: "POST",
+        body: JSON.stringify({
+          source: "balance",
+          reason: opts.narration,
+          amount: opts.amountKobo,
+          recipient: recipientData.data.recipient_code,
+          reference: opts.reference
+        })
+      });
+
+      return {
+        id: transferData.data?.id?.toString(),
+        status: transferData.data?.status,
+        reference: transferData.data?.reference
+      };
+    } catch (error: any) {
+      logger.error("[Paystack] requestPayout failed", { error: error.message });
+      throw new Error(error.message.replace("PST Error: ", "") || "Payout request failed");
+    }
+  }
 }
