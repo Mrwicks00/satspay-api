@@ -67,10 +67,8 @@ export class OfframpService {
     }
 
     try {
-      // 1. Resolve Account Name first to assert validity and fetch proper name
+      // 1. Primary: Flutterwave
       const accountInfo = await this.verifyAccount(bankCode, accountNumber, "flutterwave");
-
-      // 2. Initiate Transfer
       const providerRef = `SPY-FW-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const payload = {
         account_bank: bankCode,
@@ -79,7 +77,7 @@ export class OfframpService {
         narration: `SatsPay Payout ${transfer.id.slice(-6)}`,
         currency: "NGN",
         reference: providerRef,
-        callback_url: "https://satspay.africa/api/v1/webhooks/flutterwave" // We rely on webhook to mark complete
+        callback_url: "https://satspay.africa/api/v1/webhooks/flutterwave"
       };
 
       const data = await this.flwFetch("/transfers", {
@@ -96,15 +94,43 @@ export class OfframpService {
             accountNumber,
             accountName: accountInfo.accountName,
             amountNgn: transfer.amountNgn || 0,
-            status: "PROCESSING", // Will update to COMPLETED via webhook
+            status: "PROCESSING",
             providerRef: data.data.id?.toString() || providerRef
           }
         });
       }
       throw new Error(data.message || "Transfer initiation failed");
-    } catch (error: any) {
-      console.error("[Offramp] Failed to request payout:", error.message);
-      throw new Error(error.message.replace("FLW Error: ", "") || "Payout request failed");
+    } catch (flwError: any) {
+      // 2. Fallback: Paystack
+      logger.warn("[Offramp] FLW payout failed — falling back to Paystack", { error: flwError.message });
+      try {
+        const pstAccountInfo = await PaystackService.verifyAccount(bankCode, accountNumber);
+        const pstRef = `SPY-PST-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        await PaystackService.requestPayout({
+          accountNumber,
+          bankCode,
+          accountName: pstAccountInfo.accountName,
+          amountKobo: Number(transfer.amountNgn) * 100, // Convert NGN -> Kobo
+          reference: pstRef,
+          narration: `SatsPay Payout ${transfer.id.slice(-6)}`
+        });
+
+        return await prisma.offrampPayout.create({
+          data: {
+            transferId,
+            provider: "PAYSTACK",
+            bankCode,
+            accountNumber,
+            accountName: pstAccountInfo.accountName,
+            amountNgn: transfer.amountNgn || 0,
+            status: "PROCESSING",
+            providerRef: pstRef
+          }
+        });
+      } catch (pstError: any) {
+        logger.error("[Offramp] Paystack fallback also failed", { error: pstError.message });
+        throw new Error("All payout providers exhausted. Please try again later.");
+      }
     }
   }
 
