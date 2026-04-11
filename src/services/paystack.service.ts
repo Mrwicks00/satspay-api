@@ -44,4 +44,25 @@ export class PaystackService {
       }
     }
   }
+
+  /** Fetches Nigerian banks via Paystack */
+  static async getBanks(): Promise<{ code: string; name: string }[]> {
+    if (env.NODE_ENV === "test") {
+      return [
+        { code: "058", name: "GTBank" },
+        { code: "057", name: "Zenith Bank" }
+      ];
+    }
+
+    try {
+      const data = await this.pstFetch("/bank?country=nigeria&perPage=100", { method: "GET" });
+      if (data.status && data.data) {
+        return data.data.map((b: any) => ({ code: b.code, name: b.name }));
+      }
+      return [];
+    } catch (error: any) {
+      logger.error("[Paystack] Failed to fetch banks", { error: error.message });
+      throw new Error("Failed to retrieve banks from Paystack");
+    }
+  }
 }
