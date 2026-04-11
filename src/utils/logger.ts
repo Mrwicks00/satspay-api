@@ -21,7 +21,15 @@ const devFormat = combine(
 
 const prodFormat = combine(timestamp(), json());
 
-const coreTransports: any[] = [new transports.Console()];
+const coreTransports: any[] = [
+  new transports.Console(),
+  new transports.File({ 
+    filename: path.join(logDir, "error.log"), 
+    level: "error",
+    maxsize: 5242880, // 5MB
+    maxFiles: 5
+  })
+];
 
 export const logger = createLogger({
   level: env.NODE_ENV === "production" ? "info" : "debug",
