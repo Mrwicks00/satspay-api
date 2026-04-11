@@ -104,4 +104,35 @@ router.post("/payouts/:id/force-retry", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * @route   POST /api/v1/admin/payouts/:id/freeze
+ * @desc    Force suspend a PROCESSING payout to REJECTED overriding active webhooks
+ * @access  Private (Admin only)
+ */
+router.post("/payouts/:id/freeze", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const payout = await prisma.offrampPayout.findUnique({
+      where: { id }
+    });
+
+    if (!payout) return res.status(404).json({ error: "Payout not found" });
+    if (payout.status !== "PROCESSING") {
+      return res.status(400).json({ error: `Cannot freeze a ${payout.status} payout` });
+    }
+
+    await prisma.offrampPayout.update({
+      where: { id },
+      data: { status: "FAILED" } // Prisma schema enforces COMPLETED, FAILED, PROCESSING
+    });
+
+    logger.warn(`[Admin] Payed ${id} administratively frozen!`);
+    res.json({ success: true, message: "Payout permanently intercepted and administratively frozen." });
+  } catch (error: any) {
+    logger.error("[Admin] Freeze operation failed", { id: req.params.id, error: error.message });
+    res.status(500).json({ error: "Freeze operation failed" });
+  }
+});
+
 export default router;
