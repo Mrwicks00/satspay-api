@@ -25,6 +25,30 @@ export const startReconciliationJob = () => {
       }
       
       logger.info(`[Cron] Found ${strandedPayouts.length} stranded payouts. Starting ping sweep.`);
+
+      let resolvedCounter = 0;
+      for (const payout of strandedPayouts) {
+        try {
+          const remoteStatus = payout.provider === "PAYSTACK" 
+            ? await PaystackService.getPayoutStatus(payout.providerRef)
+            : await OfframpService.getPayoutStatus(payout.providerRef);
+
+          if (remoteStatus !== "PROCESSING") {
+            await prisma.offrampPayout.update({
+              where: { id: payout.id },
+              data: { status: remoteStatus }
+            });
+            resolvedCounter++;
+            logger.info(`[Cron] Reconciled payout ${payout.id} -> ${remoteStatus}`);
+          }
+        } catch (innerError: any) {
+          logger.warn(`[Cron] Failed to reconcile payout ${payout.id}: ${innerError.message}`);
+        }
+      }
+
+      if (resolvedCounter > 0) {
+        logger.info(`[Cron] Sweep complete. Reconciled ${resolvedCounter} payouts.`);
+      }
     } catch (error: any) {
       logger.error("[Cron] Reconciliation sweep failed", { error: error.message });
     }
