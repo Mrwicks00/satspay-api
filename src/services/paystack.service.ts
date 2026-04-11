@@ -148,4 +148,22 @@ export class PaystackService {
       throw new Error(error.message.replace("PST Error: ", "") || "Payout request failed");
     }
   }
+
+  /** Queries Paystack for exact status of a stranded payout using reference */
+  static async getPayoutStatus(providerRef: string): Promise<"PROCESSING" | "COMPLETED" | "FAILED"> {
+    if (env.NODE_ENV === "test") return "COMPLETED";
+
+    try {
+      const data = await this.pstFetch(`/transfer/verify/${providerRef}`, { method: "GET" });
+      if (!data.status || !data.data) return "PROCESSING";
+
+      const pstStatus = data.data.status?.toUpperCase();
+      if (pstStatus === "SUCCESS" || pstStatus === "SUCCESSFUL") return "COMPLETED";
+      if (pstStatus === "FAILED" || pstStatus === "REVERSED") return "FAILED";
+
+      return "PROCESSING";
+    } catch {
+      return "PROCESSING";
+    }
+  }
 }
