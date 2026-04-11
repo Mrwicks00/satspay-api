@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { AfricaTalkingService } from "./africatalking.service.js";
 
 export class SmsService {
   /** Sends an SMS notification via Termii with exponential backoff */
@@ -43,7 +44,9 @@ export class SmsService {
         await new Promise(res => setTimeout(res, delay));
       }
     }
-    return false;
+    // If all Termii retries fail, auto-fallback to Africa's Talking
+    logger.warn("[SMS] Termii exhausted all retries — falling back to Africa's Talking");
+    return AfricaTalkingService.sendSms(phone, message);
   }
 
   /** Sends a claim link to a recipient */
